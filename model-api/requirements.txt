@@ -1,0 +1,12 @@
+diffusers>=0.30
+transformers>=4.40
+torch>=2.2
+accelerate>=0.30
+bitsandbytes>=0.43        # 4-bit quantized (bnb) FLUX.2-dev loading
+Pillow>=10.0
+safetensors>=0.4
+sentencepiece>=0.2
+protobuf>=4.25
+fastapi>=0.110
+uvicorn[standard]>=0.29
+python-multipart>=0.0.9

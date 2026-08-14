@@ -1,0 +1,10 @@
+/data
+/models
+/redis
+.DS_Store
+**/__pycache__
+**/*.pyc
+**/node_modules
+**/.env
+*.tsbuildinfo
+/frontend/dist

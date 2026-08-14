@@ -1,0 +1,73 @@
+services:
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"   # 宿主:容器
+    depends_on:
+      - backend
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    # 对外端口可关(INTERNAL_ONLY=1)防止与 K8s NodePort 冲突;
+    # 默认 8081 只在宿主本地访问,给调试/反向代理用。
+    ports:
+      - "${BACKEND_PORT:-127.0.0.1:8081}:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${DB_USER:-flux}:${DB_PASSWORD:-flux}@db:5432/${DB_NAME:-flux}
+      REDIS_URL: redis://redis:6379/0
+      MODEL_API_URL: ${MODEL_API_URL:?请在 .env 中配置 MODEL_API_URL(指向自管的 GPU 模型服务)}
+      OUTPUT_DIR: /data/outputs
+      UPLOAD_DIR: /data/uploads
+    volumes:
+      - ${DATA_DIR:-./data}/outputs:/data/outputs
+      - ${DATA_DIR:-./data}/uploads:/data/uploads
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - ./redis:/data
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-flux}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-flux}
+      POSTGRES_DB: ${DB_NAME:-flux}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - ${DATA_DIR:-./data}/pg:/var/lib/postgresql/data
+
+  # Worker: HTTP client, no GPU needed. The GPU model service (model-api/app.py)
+  # runs on a remote GPU host and is reached via MODEL_API_URL.
+  worker:
+    build: ./worker
+    restart: unless-stopped
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      MODEL_API_URL: ${MODEL_API_URL:?请在 .env 中配置 MODEL_API_URL(指向自管的 GPU 模型服务)}
+      OUTPUT_DIR: /data/outputs
+      UPLOAD_DIR: /data/uploads
+    volumes:
+      - ${DATA_DIR:-./data}/outputs:/data/outputs
+      - ${DATA_DIR:-./data}/uploads:/data/uploads
+    depends_on:
+      redis:
+        condition: service_healthy

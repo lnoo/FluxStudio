@@ -1,0 +1,25 @@
+#!/bin/bash
+
+case "$1" in
+  start)
+    source ~/flux2-env/bin/activate
+    export CUDA_VISIBLE_DEVICES=1
+    nohup python ./app.py > output.log 2>&1 &
+    echo "服务已在后台启动（GPU 1）"
+    ;;
+  stop)
+    PID=$(pgrep -f "./app.py")
+    if [ -z "$PID" ]; then
+      echo "未找到正在运行的 app.py 服务"
+    else
+      kill $PID
+      echo "服务已停止 (PID: $PID)"
+    fi
+    ;;
+  log)
+    tail -f output.log
+    ;;
+  *)
+    echo "使用方法: $0 {start|stop|log}"
+    ;;
+esac

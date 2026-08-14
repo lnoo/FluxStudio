@@ -1,0 +1,13 @@
+.git
+.gitignore
+.dockerignore
+.env
+data
+models
+redis
+**/node_modules
+**/__pycache__
+**/*.pyc
+.DS_Store
+frontend/tsconfig.tsbuildinfo
+frontend/dist
