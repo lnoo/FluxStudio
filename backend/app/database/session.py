@@ -31,6 +31,9 @@ async def init_db() -> None:
             await conn.execute(text(
                 f"ALTER TABLE tasks ADD COLUMN IF NOT EXISTS {col} INTEGER"
             ))
+        await conn.execute(text(
+            "ALTER TABLE images ADD COLUMN IF NOT EXISTS tag VARCHAR(16)"
+        ))
 
 
 @asynccontextmanager

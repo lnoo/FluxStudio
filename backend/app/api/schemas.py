@@ -49,3 +49,31 @@ class CancelResponse(BaseModel):
 class DeleteResponse(BaseModel):
     task_id: str
     status: str
+
+
+class BulkUploadImage(BaseModel):
+    filename: str
+    original_name: str
+    tag: Optional[str] = None
+
+
+class BulkUploadResponse(BaseModel):
+    images: list[BulkUploadImage]
+
+
+class BatchGenerateRequest(BaseModel):
+    """Batch generation: every background gets `k` randomly-sampled objects."""
+    background_images: list[str] = Field(min_length=1)
+    object_images: list[str] = Field(min_length=1)
+    k: int = Field(default=3, ge=1)
+    rounds: int = Field(default=1, ge=1)
+    prompt: str
+    steps: int = Field(default=20, ge=1, le=60)
+    guidance: Optional[float] = None
+    width: Optional[int] = Field(default=None, ge=8, le=4096)
+    height: Optional[int] = Field(default=None, ge=8, le=4096)
+
+
+class BatchGenerateResponse(BaseModel):
+    task_ids: list[str]
+    count: int

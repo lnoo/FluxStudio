@@ -4,18 +4,36 @@ from pathlib import Path
 from typing import List, Optional
 
 import httpx
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.schemas import CancelResponse, DeleteResponse, GenerateRequest, GenerateResponse, TaskParams, TaskStatusResponse
+from app.api.schemas import (
+    BatchGenerateRequest,
+    BatchGenerateResponse,
+    BulkUploadResponse,
+    CancelResponse,
+    DeleteResponse,
+    GenerateRequest,
+    GenerateResponse,
+    TaskParams,
+    TaskStatusResponse,
+)
 from app.config import settings
 from app.database.session import get_db
 from app.models import Image, Task
 from app.queue.redis_queue import clear_cancel_flag, publish_status, set_cancel_flag
 from app.services.file_service import save_images
-from app.services.task_service import cancel_task, create_task, delete_task, enqueue_task, get_avg_sec_per_step, retry_task
+from app.services.task_service import (
+    cancel_task,
+    create_batch_tasks,
+    create_task,
+    delete_task,
+    enqueue_task,
+    get_avg_sec_per_step,
+    retry_task,
+)
 
 router = APIRouter()
 
@@ -38,6 +56,86 @@ async def upload_images(files: List[UploadFile] = File(...), db: AsyncSession = 
         ))
     await db.commit()
     return {"images": [s["filename"] for s in saved]}
+
+
+# ---------------------------------------------------------------------------
+# Bulk upload: register a large pool of images (e.g. 200 backgrounds / 300
+# objects). The frontend chunks the files client-side to respect the nginx
+# body-size limit; `tag` labels the role ("background" | "object").
+# ---------------------------------------------------------------------------
+@router.post("/upload/bulk", response_model=BulkUploadResponse)
+async def upload_bulk(
+    files: List[UploadFile] = File(...),
+    tag: str = Form(default=""),
+    db: AsyncSession = Depends(get_db),
+):
+    if tag not in ("", "background", "object"):
+        raise HTTPException(400, f"invalid tag '{tag}' (must be background, object, or empty)")
+    saved = await save_images(files)
+    for s in saved:
+        db.add(Image(
+            id=uuid.uuid4().hex,
+            filename=s["filename"],
+            original_name=s.get("original_name"),
+            kind="input",
+            size_bytes=s.get("size_bytes"),
+            tag=tag or None,
+        ))
+    await db.commit()
+    return {"images": [
+        {"filename": s["filename"], "original_name": s.get("original_name") or s["filename"], "tag": tag or None}
+        for s in saved
+    ]}
+
+
+# ---------------------------------------------------------------------------
+# Batch generation: every background image gets `k` randomly-sampled objects
+# composited onto it (one independent task per background × rounds).
+# ---------------------------------------------------------------------------
+async def _ensure_uploaded_filenames(db: AsyncSession, filenames: list[str]) -> set[str]:
+    if not filenames:
+        return set()
+    result = await db.execute(select(Image.filename).where(
+        Image.filename.in_(filenames), Image.kind == "input"
+    ))
+    return set(result.scalars().all())
+
+
+@router.post("/batch/generate", response_model=BatchGenerateResponse)
+async def batch_generate(req: BatchGenerateRequest, db: AsyncSession = Depends(get_db)):
+    total = len(req.background_images) * req.rounds
+    if total > settings.MAX_BATCH_JOBS:
+        raise HTTPException(400, f"batch too large: {total} tasks (max {settings.MAX_BATCH_JOBS})")
+    if req.k > settings.MAX_INPUT_IMAGES - 1:
+        raise HTTPException(400, f"k={req.k} exceeds max objects per task ({settings.MAX_INPUT_IMAGES - 1})")
+
+    existing = await _ensure_uploaded_filenames(db, req.background_images + req.object_images)
+    missing = [f for f in set(req.background_images + req.object_images) if f not in existing]
+    if missing:
+        raise HTTPException(400, f"unknown/unregistered image filenames: {missing[:5]}...")
+
+    tasks = await create_batch_tasks(
+        db,
+        req.background_images,
+        req.object_images,
+        k=req.k,
+        rounds=req.rounds,
+        prompt=req.prompt,
+        steps=req.steps,
+        guidance=req.guidance,
+        width=req.width,
+        height=req.height,
+    )
+    await db.commit()  # persist every task before any enqueue
+
+    task_ids: list[str] = []
+    for task in tasks:
+        images = task.input_images.split(",") if task.input_images else []
+        await publish_status(task.id, "queued", 0)
+        await enqueue_task(task, images, task.width, task.height)
+        task_ids.append(task.id)
+
+    return BatchGenerateResponse(task_ids=task_ids, count=len(task_ids))
 
 
 # ---------------------------------------------------------------------------

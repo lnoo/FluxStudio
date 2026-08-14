@@ -21,6 +21,8 @@ class Settings:
 
     # --- Worker / generation defaults ---
     MAX_INPUT_IMAGES = 8
+    # Max tasks a single batch submission may create (prevents runaway queues).
+    MAX_BATCH_JOBS = int(os.getenv("MAX_BATCH_JOBS", "500"))
     # Per-file upload cap (bytes). The nginx proxy also limits total body size,
     # but the backend must enforce it too since port 8081 is directly reachable.
     MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(20 * 1024 * 1024)))

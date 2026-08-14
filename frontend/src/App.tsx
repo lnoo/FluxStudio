@@ -1,8 +1,9 @@
 import { useEffect } from "react";
-import { Button, ScrollShadow } from "@heroui/react";
 import { Sun, Moon } from "@gravity-ui/icons";
+import { Button, ScrollShadow, Tabs } from "@heroui/react";
 import { UploadPanel } from "./components/UploadPanel";
 import { ParamsPanel } from "./components/ParamsPanel";
+import { BatchPanel } from "./components/BatchPanel";
 import { TaskList } from "./components/TaskList";
 import { BackToTop } from "./components/BackToTop";
 import { useStore } from "./store/appStore";
@@ -36,11 +37,29 @@ export default function App() {
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
           <ScrollShadow
             hideScrollBar
-            className="flex flex-col gap-6 md:sticky md:top-6 md:self-start md:max-h-[calc(100vh-3rem)]"
+            className="flex flex-col md:sticky md:top-6 md:self-start md:max-h-[calc(100vh-3rem)]"
           >
-
-            <UploadPanel />
-            <ParamsPanel />
+            <Tabs defaultSelectedKey="single" aria-label="生成模式">
+              <Tabs.ListContainer>
+                <Tabs.List>
+                  <Tabs.Tab id="single">
+                    单张生成
+                    <Tabs.Indicator />
+                  </Tabs.Tab>
+                  <Tabs.Tab id="batch">
+                    批量生成
+                    <Tabs.Indicator />
+                  </Tabs.Tab>
+                </Tabs.List>
+              </Tabs.ListContainer>
+              <Tabs.Panel id="single">
+                <UploadPanel />
+                <ParamsPanel />
+              </Tabs.Panel>
+              <Tabs.Panel id="batch">
+                <BatchPanel />
+              </Tabs.Panel>
+            </Tabs>
           </ScrollShadow>
           <TaskList />
         </div>

@@ -1,4 +1,5 @@
 """Task creation + status update logic (DB writes happen here)."""
+import random
 import uuid
 from datetime import datetime
 from typing import Any, Optional
@@ -73,6 +74,53 @@ async def enqueue_task(
         "width": width,
         "height": height,
     })
+
+
+async def create_batch_tasks(
+    db: AsyncSession,
+    background_images: list[str],
+    object_images: list[str],
+    k: int,
+    rounds: int,
+    prompt: str,
+    steps: int,
+    guidance: Optional[float],
+    width: Optional[int] = None,
+    height: Optional[int] = None,
+) -> list[Task]:
+    """Create one task per background, each compositing `k` randomly-sampled objects.
+
+    Each task is `images = [background, *sampled_objects]` (background is always
+    images[0], matching the worker/model-api role contract). When `rounds > 1`,
+    every round re-samples objects so the same background yields different
+    combinations. Does NOT enqueue; the caller publishes + enqueues each task.
+    """
+    tasks: list[Task] = []
+    for bg in background_images:
+        for _ in range(rounds):
+            sampled = random.sample(object_images, k)
+            images = [bg, *sampled]
+            task = Task(
+                id=uuid.uuid4().hex,
+                status="queued",
+                progress=0,
+                prompt=prompt,
+                steps=steps,
+                guidance=guidance,
+                input_images=",".join(images),
+                width=width,
+                height=height,
+            )
+            for fn in images:
+                task.images.append(Image(
+                    id=uuid.uuid4().hex,
+                    filename=fn,
+                    kind="input",
+                ))
+            db.add(task)
+            await db.flush()
+            tasks.append(task)
+    return tasks
 
 
 async def cancel_task(db: AsyncSession, task: Task) -> None:

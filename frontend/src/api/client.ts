@@ -37,6 +37,38 @@ export async function uploadImages(files: File[]): Promise<string[]> {
   return data.images;
 }
 
+export interface BulkUploadItem {
+  filename: string;
+  original_name: string;
+  tag?: string | null;
+}
+
+/**
+ * Upload a large set of files (e.g. a whole background/object folder) in
+ * chunks to stay under the nginx body-size limit, tagging each file's role.
+ * Returns the full manifest across all chunks.
+ */
+export async function uploadBulk(
+  files: File[],
+  tag: string,
+  chunkSize = 25,
+  onProgress?: (done: number, total: number) => void
+): Promise<BulkUploadItem[]> {
+  const manifest: BulkUploadItem[] = [];
+  let done = 0;
+  for (let i = 0; i < files.length; i += chunkSize) {
+    const chunk = files.slice(i, i + chunkSize);
+    const form = new FormData();
+    for (const f of chunk) form.append("files", f);
+    form.append("tag", tag);
+    const { data } = await http.post<{ images: BulkUploadItem[] }>("/upload/bulk", form);
+    manifest.push(...data.images);
+    done += chunk.length;
+    onProgress?.(done, files.length);
+  }
+  return manifest;
+}
+
 export interface GeneratePayload {
   images: string[];
   prompt: string;
@@ -48,6 +80,28 @@ export interface GeneratePayload {
 
 export async function createTask(payload: GeneratePayload): Promise<GenerateResponse> {
   const { data } = await http.post<GenerateResponse>("/generate", payload);
+  return data;
+}
+
+export interface BatchGeneratePayload {
+  background_images: string[];
+  object_images: string[];
+  k: number;
+  rounds: number;
+  prompt: string;
+  steps: number;
+  guidance: number;
+  width?: number | null;
+  height?: number | null;
+}
+
+export interface BatchGenerateResponse {
+  task_ids: string[];
+  count: number;
+}
+
+export async function createBatch(payload: BatchGeneratePayload): Promise<BatchGenerateResponse> {
+  const { data } = await http.post<BatchGenerateResponse>("/batch/generate", payload);
   return data;
 }
 
