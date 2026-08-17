@@ -4,6 +4,7 @@ import { Sun, Moon } from "@gravity-ui/icons";
 import { UploadPanel } from "./components/UploadPanel";
 import { ParamsPanel } from "./components/ParamsPanel";
 import { TaskList } from "./components/TaskList";
+import { BackToTop } from "./components/BackToTop";
 import { useStore } from "./store/appStore";
 
 export default function App() {
@@ -44,6 +45,8 @@ export default function App() {
           <TaskList />
         </div>
       </main>
+
+      <BackToTop />
     </div>
   );
 }
