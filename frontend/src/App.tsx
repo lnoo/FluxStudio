@@ -52,11 +52,11 @@ export default function App() {
                   </Tabs.Tab>
                 </Tabs.List>
               </Tabs.ListContainer>
-              <Tabs.Panel id="single">
+              <Tabs.Panel id="single" className="flex flex-col gap-6">
                 <UploadPanel />
                 <ParamsPanel />
               </Tabs.Panel>
-              <Tabs.Panel id="batch">
+              <Tabs.Panel id="batch" className="flex flex-col gap-6">
                 <BatchPanel />
               </Tabs.Panel>
             </Tabs>
